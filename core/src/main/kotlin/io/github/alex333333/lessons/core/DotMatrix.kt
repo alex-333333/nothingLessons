@@ -1,7 +1,7 @@
 package io.github.alex333333.lessons.core
 
 /**
- * A tiny 5×7 dot-matrix "font" for the countdown digits, in the spirit of Nothing's
+ * A tiny 5×7 dot-matrix "font" for the countdown digits and the app title, in the spirit of Nothing's
  * dot typefaces. Each glyph is a list of rows; '#' is a lit dot.
  */
 object DotMatrix {
@@ -20,6 +20,12 @@ object DotMatrix {
         '9' to listOf(".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."),
         ':' to listOf(".", ".", "#", ".", "#", ".", "."),
         '-' to listOf(".....", ".....", ".....", "#####", ".....", ".....", "....."),
+        // Cyrillic capitals for the app title.
+        'У' to listOf("#...#", "#...#", "#...#", ".####", "....#", "#...#", ".###."),
+        'Р' to listOf("####.", "#...#", "#...#", "####.", "#....", "#....", "#...."),
+        'О' to listOf(".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."),
+        'К' to listOf("#...#", "#..#.", "#.#..", "##...", "#.#..", "#..#.", "#...#"),
+        'И' to listOf("#...#", "#...#", "#..##", "#.#.#", "##..#", "#...#", "#...#"),
         ' ' to listOf(".....", ".....", ".....", ".....", ".....", ".....", "....."),
     )
 

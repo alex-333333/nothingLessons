@@ -22,6 +22,8 @@ data class Config(
     val bells: List<Bell> = emptyList(),
     val week: List<List<String>> = List(7) { emptyList() },
     val sundayEnabled: Boolean = false,
+    val font: FontChoice = FontChoice.NotoSerif,
+    val weight: FontWeightChoice = FontWeightChoice.Regular,
 ) {
     fun subjects(day: DayOfWeek): List<String> = week.getOrNull(day.value - 1).orEmpty()
 
@@ -44,6 +46,14 @@ data class Config(
 
     internal fun normalizedWeek(): List<List<String>> = List(7) { week.getOrNull(it).orEmpty() }
 }
+
+/** Typeface for subject names on the widget and in the app. */
+@Serializable
+enum class FontChoice { NotoSerif, RobotoSerif, Inter }
+
+/** Weight of subject names; bold reads loud, so regular is the default. */
+@Serializable
+enum class FontWeightChoice(val weight: Int) { Regular(400), Medium(500), Bold(700) }
 
 /** A lesson on a particular day. [number] is the 1-based bell number shown to the user. */
 data class Slot(

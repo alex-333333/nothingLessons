@@ -14,6 +14,8 @@ class ConfigCodecTest {
             Bell(LocalTime.of(9, 25), LocalTime.of(10, 10)),
         ),
         sundayEnabled = true,
+        font = FontChoice.RobotoSerif,
+        weight = FontWeightChoice.Bold,
     ).withSubjects(DayOfWeek.MONDAY, listOf("Алгебра", ""))
         .withSubjects(DayOfWeek.SUNDAY, listOf("Кружок"))
 
@@ -47,5 +49,20 @@ class ConfigCodecTest {
         assertEquals(7, decoded.week.size)
         assertEquals(listOf("Алгебра"), decoded.subjects(DayOfWeek.MONDAY))
         assertEquals(emptyList<String>(), decoded.subjects(DayOfWeek.FRIDAY))
+    }
+
+    @Test
+    fun `appearance defaults to regular Noto Serif`() {
+        assertEquals(FontChoice.NotoSerif, Config().font)
+        assertEquals(FontWeightChoice.Regular, Config().weight)
+    }
+
+    @Test
+    fun `an unknown font from a newer version keeps the schedule`() {
+        val json = """{"bells":[{"start":"08:30","end":"09:15"}],"font":"Comic","weight":"Heavy"}"""
+        val decoded = ConfigCodec.decode(json)
+        assertEquals(1, decoded.bells.size)
+        assertEquals(FontChoice.NotoSerif, decoded.font)
+        assertEquals(FontWeightChoice.Regular, decoded.weight)
     }
 }

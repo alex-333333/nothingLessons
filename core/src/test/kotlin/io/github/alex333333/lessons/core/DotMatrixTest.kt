@@ -37,4 +37,12 @@ class DotMatrixTest {
     fun `every glyph has the same height`() {
         DotMatrix.supported.forEach { assertEquals(DotMatrix.ROWS, DotMatrix.layout(it.toString()).height) }
     }
+
+    @Test
+    fun `app title can be drawn in dots`() {
+        val grid = DotMatrix.layout("УРОКИ")
+        assertEquals(5 * 5 + 4, grid.width)
+        // Every letter lights at least one dot in its top row.
+        for (letter in 0 until 5) assertTrue((0 until 5).any { grid[letter * 6 + it, 0] })
+    }
 }
