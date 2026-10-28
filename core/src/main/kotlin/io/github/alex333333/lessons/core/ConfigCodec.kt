@@ -14,6 +14,9 @@ import kotlinx.serialization.json.Json
 object ConfigCodec {
     private val json = Json {
         ignoreUnknownKeys = true
+        // An unknown enum value (say, a font added in a newer version) falls back to the default
+        // instead of failing the whole decode and wiping the schedule.
+        coerceInputValues = true
         encodeDefaults = true
     }
 
