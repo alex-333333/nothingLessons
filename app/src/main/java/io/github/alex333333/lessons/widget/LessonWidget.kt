@@ -6,8 +6,6 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
-import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.action.actionStartActivity
@@ -28,7 +26,8 @@ import kotlinx.coroutines.flow.first
 
 class LessonWidget : GlanceAppWidget() {
 
-    override val sizeMode = SizeMode.Responsive(setOf(SMALL, WIDE))
+    // Text is drawn into bitmaps, so draw it for the real size rather than for size buckets.
+    override val sizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val repository = ConfigRepository.get(context)
@@ -42,17 +41,9 @@ class LessonWidget : GlanceAppWidget() {
             val config by repository.config.collectAsState(initial)
             val now by currentMinute()
             Box(GlanceModifier.fillMaxSize().clickable(actionStartActivity<MainActivity>())) {
-                LessonWidgetContent(ScheduleCalculator.stateAt(config, now))
+                LessonWidgetContent(ScheduleCalculator.stateAt(config, now), config)
             }
         }
-    }
-
-    companion object {
-        /** 2×2 cells. */
-        val SMALL = DpSize(110.dp, 110.dp)
-
-        /** 4×2 cells. */
-        val WIDE = DpSize(250.dp, 110.dp)
     }
 }
 
