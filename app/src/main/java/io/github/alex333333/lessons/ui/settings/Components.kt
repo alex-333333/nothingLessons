@@ -122,13 +122,13 @@ internal fun PillTabs(selected: SettingsTab, onSelect: (SettingsTab) -> Unit) {
         Modifier
             .fillMaxWidth()
             .selectableGroup(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         for (tab in SettingsTab.entries) {
             val isSelected = tab == selected
             Box(
                 modifier = Modifier
-                    .weight(tab.width)
+                    .weight(1f)
                     .height(44.dp)
                     .pill(filled = isSelected)
                     .selectable(selected = isSelected, role = Role.Tab, onClick = { onSelect(tab) }),
@@ -138,6 +138,8 @@ internal fun PillTabs(selected: SettingsTab, onSelect: (SettingsTab) -> Unit) {
                     text = tab.label,
                     style = monoStyle(12.sp, bold = true, color = if (isSelected) Palette.Background else Palette.Text),
                     maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
                 )
             }
         }
@@ -182,7 +184,13 @@ internal fun PillButton(text: String, onClick: () -> Unit, modifier: Modifier = 
 
 @Composable
 internal fun SectionLabel(text: String) {
-    Text(text, modifier = Modifier.padding(horizontal = 4.dp), style = monoStyle(11.sp))
+    Text(
+        text = text,
+        modifier = Modifier
+            .padding(horizontal = 4.dp)
+            .semantics { heading() },
+        style = monoStyle(11.sp),
+    )
 }
 
 /** A thin "×", drawn rather than taken from an icon set. */
@@ -193,6 +201,76 @@ internal fun CrossIcon(modifier: Modifier = Modifier, color: Color = Palette.Sec
         val stroke = 1.6.dp.toPx()
         drawLine(color, Offset(3 * unit, 3 * unit), Offset(13 * unit, 13 * unit), stroke, StrokeCap.Round)
         drawLine(color, Offset(13 * unit, 3 * unit), Offset(3 * unit, 13 * unit), stroke, StrokeCap.Round)
+    }
+}
+
+/** A 48dp tap target around [CrossIcon]. */
+@Composable
+internal fun DeleteButton(description: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(onClickLabel = description, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        CrossIcon()
+    }
+}
+
+/** A thin "<" or ">". */
+@Composable
+internal fun ChevronIcon(forward: Boolean, modifier: Modifier = Modifier, color: Color = Palette.Text) {
+    Canvas(modifier.size(16.dp)) {
+        val unit = size.width / 16
+        val stroke = 1.6.dp.toPx()
+        val (tip, tail) = if (forward) 11f to 6f else 5f to 10f
+        drawLine(color, Offset(tail * unit, 3 * unit), Offset(tip * unit, 8 * unit), stroke, StrokeCap.Round)
+        drawLine(color, Offset(tip * unit, 8 * unit), Offset(tail * unit, 13 * unit), stroke, StrokeCap.Round)
+    }
+}
+
+/** A 44dp outlined circle with a chevron, inside a 48dp tap target. */
+@Composable
+internal fun CircleChevronButton(forward: Boolean, description: String, onClick: () -> Unit, enabled: Boolean = true) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(enabled = enabled, onClickLabel = description, role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(44.dp).border(1.dp, Palette.Border, CircleShape), contentAlignment = Alignment.Center) {
+            ChevronIcon(forward, color = if (enabled) Palette.Text else Palette.Muted)
+        }
+    }
+}
+
+/** A 52dp pill with a serif label: white when [primary], otherwise outlined. */
+@Composable
+internal fun RoundButton(text: String, primary: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
+    val fill = when {
+        !primary -> Modifier.border(1.dp, Palette.Border, CircleShape)
+        enabled -> Modifier.background(Palette.Text)
+        else -> Modifier.background(Palette.Muted)
+    }
+    Box(
+        modifier = modifier
+            .height(52.dp)
+            .clip(CircleShape)
+            .then(fill)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            style = bodyStyle(16.sp, medium = true, color = if (primary) Palette.Background else Palette.Text),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -220,7 +298,7 @@ internal fun PreviewCard(config: Config) {
             .fillMaxWidth()
             .heightIn(min = 88.dp)
             .clip(RoundedCornerShape(24.dp))
-            .background(Palette.Card)
+            .background(Palette.WidgetCard)
             .semantics(mergeDescendants = true) {}
             .padding(horizontal = 18.dp, vertical = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -258,7 +336,7 @@ private fun RowScope.PreviewContent(state: WidgetState, subjectFont: FontFamily)
         Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             DotMatrixText(
                 text = countdown.text,
-                off = Color(0xFF1E1E1E),
+                off = Palette.WidgetDotOff,
                 modifier = Modifier.semantics { contentDescription = countdown.text },
             )
             Text(caption, style = monoStyle(9.sp, spacing = 0.06f), maxLines = 1)

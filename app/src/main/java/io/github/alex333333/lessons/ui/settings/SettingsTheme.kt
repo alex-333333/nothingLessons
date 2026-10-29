@@ -24,6 +24,12 @@ import io.github.alex333333.lessons.ui.AppFonts
 internal object Palette {
     val Background = Color(0xFF000000)
     val Card = Color(0xFF111111)
+    /** The widget's own background, for the live preview. */
+    val WidgetCard = Color(0xFF1B1B1D)
+    val WidgetDotOff = Color(0xFF2E2E30)
+    /** Selected range in the calendar. */
+    val Band = Color(0xFF2A2A2A)
+    val SheetBorder = Color(0xFF262626)
     val Border = Color(0xFF3A3A3A)
     val Divider = Color(0xFF1F1F1F)
     val Muted = Color(0xFF5A5A5A)
@@ -31,6 +37,8 @@ internal object Palette {
     val DotOff = Color(0xFF1A1A1A)
     val Text = Color(0xFFFFFFFF)
     val Secondary = Color(0xFF8E8E8E)
+    /** Quieter body text and weekend days, between [Secondary] and [Text]. */
+    val Soft = Color(0xFFBDBDBD)
     val Accent = Color(0xFFD71921)
     val Error = Color(0xFFFF5A5A)
 }
