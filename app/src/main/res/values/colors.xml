@@ -2,9 +2,9 @@
 <resources>
     <color name="ic_launcher_background">#000000</color>
 
-    <!-- Widget palette (light). values-night overrides it with Nothing's widget grey;
+    <!-- Widget palette (light), matched to Nothing's own widgets. values-night overrides it;
          the launcher picks per theme. -->
-    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_bg">#F2F2F4</color>
     <color name="widget_text">#000000</color>
     <color name="widget_sub">#666666</color>
     <color name="widget_accent">#D71921</color>
