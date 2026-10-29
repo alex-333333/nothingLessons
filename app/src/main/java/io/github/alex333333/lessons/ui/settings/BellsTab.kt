@@ -9,9 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,8 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -125,23 +121,11 @@ private fun BellCard(index: Int, bell: Bell, error: BellError?, onEdit: (start: 
                 style = monoStyle(11.sp, spacing = 0f),
                 maxLines = 1,
             )
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .clickable(onClickLabel = "Удалить урок", role = Role.Button, onClick = onDelete)
-                    .semantics { contentDescription = "Удалить урок" },
-                contentAlignment = Alignment.Center,
-            ) {
-                CrossIcon()
-            }
+            DeleteButton("Удалить урок", onDelete)
         }
         error?.let {
             Text(
-                text = when (it) {
-                    BellError.EndBeforeStart -> "Конец урока раньше начала"
-                    BellError.OverlapsPrevious -> "Начинается раньше, чем кончится ${number - 1} урок"
-                },
+                text = it.message(number),
                 modifier = Modifier.padding(start = 34.dp, bottom = 6.dp),
                 style = bodyStyle(12.sp, color = Palette.Error),
             )
@@ -149,8 +133,13 @@ private fun BellCard(index: Int, bell: Bell, error: BellError?, onEdit: (start: 
     }
 }
 
+internal fun BellError.message(number: Int): String = when (this) {
+    BellError.EndBeforeStart -> "Конец урока раньше начала"
+    BellError.OverlapsPrevious -> "Начинается раньше, чем кончится ${number - 1} урок"
+}
+
 @Composable
-private fun TimeButton(time: LocalTime, style: TextStyle, label: String, onClick: () -> Unit) {
+internal fun TimeButton(time: LocalTime, style: TextStyle, label: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .heightIn(min = 48.dp)
@@ -166,7 +155,7 @@ private fun TimeButton(time: LocalTime, style: TextStyle, label: String, onClick
 /** Material time picker in a dark dialog (material3 1.3 has no TimePickerDialog). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeDialog(title: String, initial: LocalTime, onDismiss: () -> Unit, onConfirm: (LocalTime) -> Unit) {
+internal fun TimeDialog(title: String, initial: LocalTime, onDismiss: () -> Unit, onConfirm: (LocalTime) -> Unit) {
     val state = rememberTimePickerState(initialHour = initial.hour, initialMinute = initial.minute, is24Hour = true)
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -202,9 +191,12 @@ private fun Config.withoutBell(index: Int, bell: Bell): Config {
     )
 }
 
+private fun Config.withBellTime(index: Int, start: Boolean, time: LocalTime): Config =
+    copy(bells = bells.withTime(index, start, time))
+
 /** Moving the start keeps the lesson's length; a lesson cannot run past midnight. */
-private fun Config.withBellTime(index: Int, start: Boolean, time: LocalTime): Config {
-    val bell = bells.getOrNull(index) ?: return this
+internal fun List<Bell>.withTime(index: Int, start: Boolean, time: LocalTime): List<Bell> {
+    val bell = getOrNull(index) ?: return this
     val updated = if (start) {
         val length = Duration.between(bell.start, bell.end)
         val end = when {
@@ -215,7 +207,7 @@ private fun Config.withBellTime(index: Int, start: Boolean, time: LocalTime): Co
     } else {
         bell.copy(end = time)
     }
-    return copy(bells = bells.toMutableList().also { it[index] = updated })
+    return toMutableList().also { it[index] = updated }
 }
 
 @Preview
