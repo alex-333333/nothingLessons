@@ -35,6 +35,7 @@ import io.github.alex333333.lessons.ui.AppFonts
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
+import java.time.temporal.ChronoUnit
 
 /** Widgets at least this wide get the 4×2 layout. */
 private val WIDE_MIN_WIDTH = 220.dp
@@ -67,6 +68,8 @@ private class Face(
     val wideStatus: String = status,
     val current: String = "",
     val progress: Float? = null,
+    /** Dots in the 4×2 progress row: 20 for a lesson, one per day for holidays. */
+    val progressDots: Int = 20,
     val digits: String,
     val digitsDim: Boolean = false,
     /** Lines next to the digits in 2×2; joined into one under them in 4×2. */
@@ -119,7 +122,7 @@ private fun Wide(face: Face, pen: Pen, inner: Dp, modifier: GlanceModifier) {
             }
             face.progress?.let {
                 Spacer(GlanceModifier.height(pen.dp(8f)))
-                Picture(pen.progress(it, left), R.color.widget_text)
+                Picture(pen.progress(it, face.progressDots, left), R.color.widget_text)
             }
             Spacer(GlanceModifier.defaultWeight())
             val label = pen.mono(9f)
@@ -212,8 +215,8 @@ private class Pen(private val context: Context, private val s: Float, config: Co
     fun digits(text: String, dot: Float, gap: Float, maxWidth: Dp) =
         WidgetBitmaps.dotMatrix(context, text, dp(dot), dp(gap), maxWidth)
 
-    fun progress(progress: Float, maxWidth: Dp) =
-        WidgetBitmaps.progressDots(context, progress, dp(4.5f), dp(3.5f), maxWidth)
+    fun progress(progress: Float, count: Int, maxWidth: Dp) =
+        WidgetBitmaps.progressDots(context, progress, dp(4.5f), dp(3.5f), maxWidth, count)
 
     /** The first of [texts] that fits on one line, else the last one (to be ellipsized). */
     fun firstFitting(style: BitmapTextStyle, maxWidth: Dp, vararg texts: String): String =
@@ -298,14 +301,19 @@ private fun describe(state: WidgetState): Face = when (state) {
 
     is WidgetState.Holidays -> {
         val next = state.next
+        val holiday = state.holiday
+        // One dot per holiday day (at most 20), filled up to and including today.
+        val total = ChronoUnit.DAYS.between(holiday.first, holiday.last).toInt() + 1
+        val passed = ChronoUnit.DAYS.between(holiday.first, LocalDate.now()).toInt() + 1
+        val label = next?.let { "${dayName(it.day)} · ${shortDate(it.date)} · ${it.slot.number} УРОК" } ?: "УЧЁБА"
         Face(
             live = false,
-            status = "КАНИКУЛЫ",
-            wideStatus = "КАНИКУЛЫ · ДО ${shortDate(state.holiday.last)}",
+            status = "КАНИКУЛЫ · ДО ${shortDate(holiday.last)}",
+            progress = passed.toFloat() / total,
+            progressDots = total.coerceAtMost(20),
             digits = state.daysLeft.toString(),
             unit = listOf("ДН.", "ДО УЧЁБЫ"),
-            nextLabel = next?.let { "${dayName(it)} · ${it.slot.number} УРОК" } ?: "УЧЁБА",
-            wideNextLabel = next?.let { "${dayName(it.day)} · ${shortDate(it.date)} · ${it.slot.number} УРОК" } ?: "УЧЁБА",
+            nextLabel = label,
             next = next?.slot?.subject ?: "—",
         )
     }
