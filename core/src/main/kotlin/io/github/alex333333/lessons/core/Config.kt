@@ -1,6 +1,7 @@
 package io.github.alex333333.lessons.core
 
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalTime
 import kotlinx.serialization.Serializable
 
@@ -24,6 +25,10 @@ data class Config(
     val sundayEnabled: Boolean = false,
     val font: FontChoice = FontChoice.NotoSerif,
     val weight: FontWeightChoice = FontWeightChoice.Regular,
+    /** One-day changes and cancellations, sorted by date. See Calendar.kt. */
+    val overrides: List<DayOverride> = emptyList(),
+    /** School holidays, sorted by start. */
+    val holidays: List<Holiday> = emptyList(),
 ) {
     fun subjects(day: DayOfWeek): List<String> = week.getOrNull(day.value - 1).orEmpty()
 
@@ -35,14 +40,13 @@ data class Config(
     /** Lessons with a subject on [day], in bell order. */
     fun slots(day: DayOfWeek): List<Slot> {
         if (!isSchoolDay(day)) return emptyList()
-        val subjects = subjects(day)
-        return bells.mapIndexedNotNull { index, bell ->
-            val subject = subjects.getOrNull(index)?.trim().orEmpty()
-            if (subject.isEmpty()) null else Slot(index + 1, subject, bell.start, bell.end)
-        }
+        return slotsOf(bells, subjects(day))
     }
 
-    fun hasLessons(): Boolean = DayOfWeek.entries.any { slots(it).isNotEmpty() }
+    /** Whether there is anything to show: regular lessons, or a one-day change with lessons. */
+    fun hasLessons(): Boolean =
+        DayOfWeek.entries.any { slots(it).isNotEmpty() } ||
+            overrides.any { !it.cancelled && it.slots().isNotEmpty() }
 
     internal fun normalizedWeek(): List<List<String>> = List(7) { week.getOrNull(it).orEmpty() }
 }
@@ -63,12 +67,25 @@ data class Slot(
     val end: LocalTime,
 )
 
-/** A lesson that is coming up, [daysAhead] days from today (0 = today). */
+/**
+ * A lesson that is coming up on [date], [daysAhead] days from today (0 = today).
+ * [changed] when that day follows a one-day change rather than the regular week.
+ */
 data class Upcoming(
     val slot: Slot,
-    val day: DayOfWeek,
+    val date: LocalDate,
     val daysAhead: Int,
-)
+    val changed: Boolean = false,
+) {
+    val day: DayOfWeek get() = date.dayOfWeek
+}
+
+/** Lessons with a subject, in bell order; blank subjects are free slots. */
+internal fun slotsOf(bells: List<Bell>, subjects: List<String>): List<Slot> =
+    bells.mapIndexedNotNull { index, bell ->
+        val subject = subjects.getOrNull(index)?.trim().orEmpty()
+        if (subject.isEmpty()) null else Slot(index + 1, subject, bell.start, bell.end)
+    }
 
 enum class BellError { EndBeforeStart, OverlapsPrevious }
 

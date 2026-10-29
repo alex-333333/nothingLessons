@@ -28,10 +28,12 @@ import io.github.alex333333.lessons.R
 import io.github.alex333333.lessons.core.Config
 import io.github.alex333333.lessons.core.Countdown
 import io.github.alex333333.lessons.core.CountdownUnit
+import io.github.alex333333.lessons.core.DayOffReason
 import io.github.alex333333.lessons.core.Upcoming
 import io.github.alex333333.lessons.core.WidgetState
 import io.github.alex333333.lessons.ui.AppFonts
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalTime
 
 /** Widgets at least this wide get the 4×2 layout. */
@@ -277,16 +279,34 @@ private fun describe(state: WidgetState): Face = when (state) {
         val tomorrow = next.daysAhead == 1
         Face(
             live = false,
-            status = if (tomorrow) "НА СЕГОДНЯ ВСЁ" else "ВЫХОДНОЙ",
+            status = when (state.reason) {
+                DayOffReason.Cancelled -> "УРОКИ ОТМЕНЕНЫ"
+                DayOffReason.Finished -> "НА СЕГОДНЯ ВСЁ"
+                DayOffReason.NoLessons -> "ВЫХОДНОЙ"
+            },
             digits = "${start.hour}:${pad2(start.minute)}",
             unit = listOf("НАЧАЛО"),
-            nextLabel = "${if (tomorrow) "ЗАВТРА" else dayName(next.day)} · ${next.slot.number} УРОК",
+            nextLabel = "${if (tomorrow) "ЗАВТРА" else dayName(next)} · ${next.slot.number} УРОК",
             wideNextLabel = listOfNotNull(
                 "ЗАВТРА".takeIf { tomorrow },
-                dayName(next.day),
+                dayName(next),
                 "${next.slot.number} УРОК",
             ).joinToString(" · "),
             next = next.slot.subject,
+        )
+    }
+
+    is WidgetState.Holidays -> {
+        val next = state.next
+        Face(
+            live = false,
+            status = "КАНИКУЛЫ",
+            wideStatus = "КАНИКУЛЫ · ДО ${shortDate(state.holiday.last)}",
+            digits = state.daysLeft.toString(),
+            unit = listOf("ДН.", "ДО УЧЁБЫ"),
+            nextLabel = next?.let { "${dayName(it)} · ${it.slot.number} УРОК" } ?: "УЧЁБА",
+            wideNextLabel = next?.let { "${dayName(it.day)} · ${shortDate(it.date)} · ${it.slot.number} УРОК" } ?: "УЧЁБА",
+            next = next?.slot?.subject ?: "—",
         )
     }
 }
@@ -296,7 +316,7 @@ private fun upcomingLabel(upcoming: Upcoming, withNumber: Boolean): String {
     val day = when (upcoming.daysAhead) {
         0 -> "ДАЛЕЕ"
         1 -> "ЗАВТРА"
-        else -> dayName(upcoming.day)
+        else -> dayName(upcoming)
     }
     val number = if (withNumber) "${upcoming.slot.number} УРОК" else null
     return listOfNotNull(day, number, hhmm(upcoming.slot.start)).joinToString(" · ")
@@ -306,6 +326,14 @@ private fun unitName(countdown: Countdown) = when (countdown.unit) {
     CountdownUnit.Minutes -> "МИН"
     CountdownUnit.Hours -> "ЧАС"
 }
+
+/** "ПН" within the coming week, else a date like "10 НОЯ" so it isn't mistaken for this week. */
+private fun dayName(upcoming: Upcoming) =
+    if (upcoming.daysAhead <= 6) dayName(upcoming.day) else shortDate(upcoming.date)
+
+private val monthNames = listOf("ЯНВ", "ФЕВ", "МАР", "АПР", "МАЯ", "ИЮН", "ИЮЛ", "АВГ", "СЕН", "ОКТ", "НОЯ", "ДЕК")
+
+private fun shortDate(date: LocalDate) = "${date.dayOfMonth} ${monthNames[date.monthValue - 1]}"
 
 private fun dayName(day: DayOfWeek) = when (day) {
     DayOfWeek.MONDAY -> "ПН"

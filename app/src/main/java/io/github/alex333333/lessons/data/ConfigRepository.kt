@@ -9,8 +9,10 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.github.alex333333.lessons.core.Config
 import io.github.alex333333.lessons.core.ConfigCodec
+import io.github.alex333333.lessons.core.pruned
 import io.github.alex333333.lessons.widget.WidgetRefresher
 import java.io.IOException
+import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,7 +38,9 @@ class ConfigRepository private constructor(private val context: Context) {
     /** Atomically replaces the config with [transform] of the current one, then redraws the widget. */
     suspend fun update(transform: (Config) -> Config) {
         context.dataStore.edit { prefs ->
-            prefs[CONFIG_JSON] = ConfigCodec.encode(transform(ConfigCodec.decode(prefs[CONFIG_JSON])))
+            // Past changes and finished holidays are dropped on every save.
+            val updated = transform(ConfigCodec.decode(prefs[CONFIG_JSON])).pruned(LocalDate.now())
+            prefs[CONFIG_JSON] = ConfigCodec.encode(updated)
         }
         WidgetRefresher.refresh(context)
     }

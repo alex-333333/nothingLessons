@@ -1,5 +1,7 @@
 package io.github.alex333333.lessons.core
 
+import java.time.DateTimeException
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import kotlinx.serialization.KSerializer
@@ -42,5 +44,22 @@ internal object LocalTimeSerializer : KSerializer<LocalTime> {
 
     override fun serialize(encoder: Encoder, value: LocalTime) = encoder.encodeString(value.format(format))
 
-    override fun deserialize(decoder: Decoder): LocalTime = LocalTime.parse(decoder.decodeString(), format)
+    override fun deserialize(decoder: Decoder): LocalTime = parsing { LocalTime.parse(decoder.decodeString(), format) }
 }
+
+/** Dates as ISO `yyyy-MM-dd`. */
+internal object LocalDateSerializer : KSerializer<LocalDate> {
+    override val descriptor = PrimitiveSerialDescriptor("LocalDate", PrimitiveKind.STRING)
+
+    override fun serialize(encoder: Encoder, value: LocalDate) = encoder.encodeString(value.toString())
+
+    override fun deserialize(decoder: Decoder): LocalDate = parsing { LocalDate.parse(decoder.decodeString()) }
+}
+
+/** A malformed time or date is a decoding error, so [ConfigCodec.decode] falls back cleanly. */
+private inline fun <T> parsing(block: () -> T): T =
+    try {
+        block()
+    } catch (e: DateTimeException) {
+        throw SerializationException(e.message)
+    }
