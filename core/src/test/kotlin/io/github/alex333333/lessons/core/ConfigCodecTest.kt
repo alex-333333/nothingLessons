@@ -1,6 +1,7 @@
 package io.github.alex333333.lessons.core
 
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -64,5 +65,49 @@ class ConfigCodecTest {
         assertEquals(1, decoded.bells.size)
         assertEquals(FontChoice.NotoSerif, decoded.font)
         assertEquals(FontWeightChoice.Regular, decoded.weight)
+    }
+
+    @Test
+    fun `old json without calendar fields decodes unchanged`() {
+        val old = """{"bells":[{"start":"08:30","end":"09:15"}],"week":[["Алгебра"],[],[],[],[],[],[]],""" +
+            """"sundayEnabled":false,"font":"Inter","weight":"Medium"}"""
+        val expected = Config(
+            bells = listOf(Bell(LocalTime.of(8, 30), LocalTime.of(9, 15))),
+            font = FontChoice.Inter,
+            weight = FontWeightChoice.Medium,
+        ).withSubjects(DayOfWeek.MONDAY, listOf("Алгебра"))
+        val decoded = ConfigCodec.decode(old)
+        assertEquals(expected, decoded)
+        assertEquals(emptyList<DayOverride>(), decoded.overrides)
+        assertEquals(emptyList<Holiday>(), decoded.holidays)
+    }
+
+    private val calendar = config
+        .withCancelled(LocalDate.of(2026, 10, 27), true)
+        .withOverride(
+            DayOverride(
+                LocalDate.of(2026, 10, 28),
+                bells = listOf(Bell(LocalTime.of(9, 0), LocalTime.of(9, 30))),
+                subjects = listOf("Экскурсия"),
+            ),
+        )
+        .withHoliday(Holiday(LocalDate.of(2026, 12, 29), LocalDate.of(2027, 1, 11)))
+
+    @Test
+    fun `round trip keeps overrides and holidays`() {
+        assertEquals(calendar, ConfigCodec.decode(ConfigCodec.encode(calendar)))
+    }
+
+    @Test
+    fun `dates are stored as ISO yyyy-MM-dd`() {
+        val json = ConfigCodec.encode(calendar)
+        assertTrue(json.contains("\"2026-10-27\""))
+        assertTrue(json.contains("\"2027-01-11\""))
+    }
+
+    @Test
+    fun `a broken date falls back to an empty config instead of crashing`() {
+        assertEquals(Config(), ConfigCodec.decode("""{"holidays":[{"start":"2026-13-45","end":"2027-01-01"}]}"""))
+        assertEquals(Config(), ConfigCodec.decode("""{"bells":[{"start":"25:99","end":"09:15"}]}"""))
     }
 }

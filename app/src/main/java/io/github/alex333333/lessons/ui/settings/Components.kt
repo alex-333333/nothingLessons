@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import io.github.alex333333.lessons.core.Config
 import io.github.alex333333.lessons.core.Countdown
 import io.github.alex333333.lessons.core.CountdownUnit
+import io.github.alex333333.lessons.core.DayOffReason
 import io.github.alex333333.lessons.core.DotMatrix
 import io.github.alex333333.lessons.core.ScheduleCalculator
 import io.github.alex333333.lessons.core.Upcoming
@@ -297,9 +298,20 @@ private class PreviewText(
                 countdownTarget = "ДО УРОКА",
             )
             is WidgetState.DayOff -> PreviewText(
-                label = "НА СЕГОДНЯ ВСЁ",
+                label = when (state.reason) {
+                    DayOffReason.Cancelled -> "УРОКИ ОТМЕНЕНЫ"
+                    DayOffReason.Finished -> "НА СЕГОДНЯ ВСЁ"
+                    DayOffReason.NoLessons -> "ВЫХОДНОЙ"
+                },
                 nextLabel = upcomingLabel(state.next),
                 nextSubject = state.next.slot.subject,
+                countdown = null,
+                countdownTarget = "",
+            )
+            is WidgetState.Holidays -> PreviewText(
+                label = "КАНИКУЛЫ",
+                nextLabel = state.next?.let { upcomingLabel(it) },
+                nextSubject = state.next?.slot?.subject,
                 countdown = null,
                 countdownTarget = "",
             )
