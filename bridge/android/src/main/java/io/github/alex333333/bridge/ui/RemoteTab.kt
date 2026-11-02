@@ -1,6 +1,7 @@
 package io.github.alex333333.bridge.ui
 
 import android.os.SystemClock
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -31,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.alex333333.bridge.data.BridgeSession
@@ -58,6 +60,7 @@ fun RemoteTab(session: BridgeSession, pc: PcRecord?, active: Boolean, onGoToPc: 
 @Composable
 private fun RemoteContent(session: BridgeSession, pc: PcRecord, active: Boolean) {
     val palette = LocalPalette.current
+    val context = LocalContext.current
     var channel by remember { mutableStateOf<BridgeChannel?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
     var text by remember { mutableStateOf("") }
@@ -86,8 +89,20 @@ private fun RemoteContent(session: BridgeSession, pc: PcRecord, active: Boolean)
         }
     }
 
+    /** Touchpad movement: dropped silently while there is no connection (it would be a toast on every move). */
     fun send(event: InputEvent) {
         channel?.send(event)
+    }
+
+    /** A button press: true if the command went out, otherwise the user is told that it did not. */
+    fun sendCommand(event: InputEvent): Boolean {
+        val current = channel
+        if (current == null) {
+            Toast.makeText(context, "Нет связи с ПК, команда не отправлена", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        current.send(event)
+        return true
     }
 
     Column(
@@ -110,33 +125,31 @@ private fun RemoteContent(session: BridgeSession, pc: PcRecord, active: Boolean)
             PillButton(
                 text = "ОТПРАВИТЬ",
                 onClick = {
-                    if (text.isNotEmpty()) {
-                        send(InputEvent.TypeText(text))
-                        text = ""
-                    }
+                    // The text stays in the field when it could not be sent.
+                    if (text.isNotEmpty() && sendCommand(InputEvent.TypeText(text))) text = ""
                 },
                 modifier = Modifier.weight(1f),
                 primary = true,
             )
-            PillButton("ENTER", { send(InputEvent.PressKey(Key.Enter)) }, Modifier.weight(1f))
-            PillButton("СТЕРЕТЬ", { send(InputEvent.PressKey(Key.Backspace)) }, Modifier.weight(1f))
+            PillButton("ENTER", { sendCommand(InputEvent.PressKey(Key.Enter)) }, Modifier.weight(1f))
+            PillButton("СТЕРЕТЬ", { sendCommand(InputEvent.PressKey(Key.Backspace)) }, Modifier.weight(1f))
         }
 
         SectionLabel("ЗВУК И ПЛЕЕР")
         ButtonRow {
-            PillButton("ТИШЕ", { send(InputEvent.Media(MediaAction.VolumeDown)) }, Modifier.weight(1f))
-            PillButton("ЗВУК ВЫКЛ", { send(InputEvent.Media(MediaAction.Mute)) }, Modifier.weight(1f))
-            PillButton("ГРОМЧЕ", { send(InputEvent.Media(MediaAction.VolumeUp)) }, Modifier.weight(1f))
+            PillButton("ТИШЕ", { sendCommand(InputEvent.Media(MediaAction.VolumeDown)) }, Modifier.weight(1f))
+            PillButton("ЗВУК ВЫКЛ", { sendCommand(InputEvent.Media(MediaAction.Mute)) }, Modifier.weight(1f))
+            PillButton("ГРОМЧЕ", { sendCommand(InputEvent.Media(MediaAction.VolumeUp)) }, Modifier.weight(1f))
         }
         ButtonRow {
-            PillButton("НАЗАД", { send(InputEvent.Media(MediaAction.Previous)) }, Modifier.weight(1f))
-            PillButton("ПАУЗА", { send(InputEvent.Media(MediaAction.PlayPause)) }, Modifier.weight(1f))
-            PillButton("ДАЛЬШЕ", { send(InputEvent.Media(MediaAction.Next)) }, Modifier.weight(1f))
+            PillButton("НАЗАД", { sendCommand(InputEvent.Media(MediaAction.Previous)) }, Modifier.weight(1f))
+            PillButton("ПАУЗА", { sendCommand(InputEvent.Media(MediaAction.PlayPause)) }, Modifier.weight(1f))
+            PillButton("ДАЛЬШЕ", { sendCommand(InputEvent.Media(MediaAction.Next)) }, Modifier.weight(1f))
         }
 
         SectionLabel("ПИТАНИЕ")
         ButtonRow {
-            PillButton("БЛОКИРОВКА", { send(InputEvent.Power(PowerAction.Lock)) }, Modifier.weight(1f))
+            PillButton("БЛОКИРОВКА", { sendCommand(InputEvent.Power(PowerAction.Lock)) }, Modifier.weight(1f))
             PillButton("ВЫКЛЮЧИТЬ", { confirmShutdown = true }, Modifier.weight(1f))
         }
     }
@@ -149,7 +162,7 @@ private fun RemoteContent(session: BridgeSession, pc: PcRecord, active: Boolean)
             confirmButton = {
                 TextButton(
                     onClick = {
-                        send(InputEvent.Power(PowerAction.Shutdown, confirmed = true))
+                        sendCommand(InputEvent.Power(PowerAction.Shutdown, confirmed = true))
                         confirmShutdown = false
                     },
                 ) {

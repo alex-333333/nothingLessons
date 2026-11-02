@@ -9,8 +9,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.Uri
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import io.github.alex333333.bridge.data.BridgeSession
@@ -136,8 +140,8 @@ class TransferService : Service() {
             var open: () -> InputStream = {
                 contentResolver.openInputStream(uri) ?: throw IOException("Не удалось открыть файл")
             }
-            if (size < 0) {
-                // The size is unknown, but the upload needs it up front: copy to a cache file to learn it.
+            if (size <= 0) {
+                // The size is unknown (or reported as 0 by a provider that does not know it), but the upload needs it up front: copy to a cache file to learn it.
                 val copy = File.createTempFile("upload", ".tmp", cacheDir)
                 cache = copy
                 open().use { input -> copy.outputStream().use { output -> input.copyTo(output) } }
@@ -183,6 +187,12 @@ class TransferService : Service() {
             .setAutoCancel(true)
             .build()
         notificationManager().notify(resultIds.incrementAndGet(), notification)
+        // With notifications switched off the result would be invisible: say it in a toast as well.
+        if (!NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(applicationContext, outcome.title, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     companion object {

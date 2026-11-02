@@ -22,8 +22,14 @@ class ShareActivity : Activity() {
         val uris = sharedUris(intent)
         val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
         when {
-            uris.isNotEmpty() -> TransferService.start(this, uris)
-            !text.isNullOrBlank() -> TransferService.startText(this, text)
+            uris.isNotEmpty() -> {
+                Toast.makeText(this, "Отправляю на ПК…", Toast.LENGTH_SHORT).show()
+                TransferService.start(this, uris)
+            }
+            !text.isNullOrBlank() -> {
+                Toast.makeText(this, "Отправляю на ПК…", Toast.LENGTH_SHORT).show()
+                TransferService.startText(this, text)
+            }
             else -> Toast.makeText(this, "Нечего отправлять", Toast.LENGTH_SHORT).show()
         }
     }

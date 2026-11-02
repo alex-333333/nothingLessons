@@ -11,8 +11,11 @@ import org.junit.Test
 
 class ErrorTextTest {
     @Test
-    fun `an unpaired phone is explained`() {
-        assertEquals("Телефон не привязан к ПК", errorText(NotPairedException()))
+    fun `an unpaired or rejected phone is told how to recover`() {
+        assertEquals(
+            "ПК не принимает этот телефон. На вкладке «ПК» нажмите «Отвязать» и привяжите заново (или проверьте время на ПК и телефоне)",
+            errorText(NotPairedException()),
+        )
     }
 
     @Test

@@ -111,11 +111,14 @@ class BridgeSession private constructor(context: Context) {
                 delay(RECONNECT_MILLIS)
                 continue
             }
+            // A PC that refuses this phone (401 on the upgrade) will refuse it again: end instead of retrying forever.
+            var refused = false
             try {
-                emitAll(channel.events.catch { })
+                emitAll(channel.events.catch { if (it is NotPairedException) refused = true })
             } finally {
                 channel.close()
             }
+            if (refused) return@flow
             delay(RECONNECT_MILLIS)
         }
     }
