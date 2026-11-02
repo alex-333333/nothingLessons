@@ -3,8 +3,10 @@
 #   pwsh -File bridge/pc/package-win.ps1        (or: powershell -File bridge/pc/package-win.ps1)
 # Needs a JDK 17+ with jpackage on PATH (or JAVA_HOME). Produces:
 #   bridge/pc/build/Bridge/          the app-image; Bridge\Bridge.exe is a windowless launcher
-#   bridge/pc/build/Bridge-win.zip   the same folder, zipped
-# Check the result with:  Bridge\Bridge.exe --selftest --out result.txt   (exit code 0 = ok; the file says what happened)
+#   bridge/pc/build/Bridge-win.zip   the same folder, zipped, made only after the packaged program passed its self-test
+# The script verifies the package itself: it starts Bridge.exe --selftest (the launcher is a GUI-subsystem exe, so it must
+# be started with Start-Process and waited for; running it straight from a console returns at once and its exit code
+# cannot be trusted) and throws unless the exit code is 0 AND the result file ends with "SELFTEST PASSED".
 
 $ErrorActionPreference = 'Stop'
 
@@ -54,7 +56,32 @@ Invoke-Native 'jpackage' {
         --add-modules ($modules -join ',')
 }
 
-# 4. Zip the folder (the archive holds a top-level "Bridge" folder).
+# 4. Prove that the packaged program works: run its self-test with the bundled runtime. Bridge.exe has no console, so
+#    it reports into a file (--out); the exit code and the last line of that file must both say "passed".
+$exe = Join-Path $appImage 'Bridge.exe'
+if (-not (Test-Path $exe)) { throw "jpackage did not produce $exe" }
+$result = Join-Path ([System.IO.Path]::GetTempPath()) ("bridge-selftest-" + [guid]::NewGuid().ToString('N') + ".txt")
+$process = Start-Process -FilePath $exe -ArgumentList @('--selftest', '--out', ('"' + $result + '"')) -PassThru
+$null = $process.Handle # keep the handle so that ExitCode is readable after the process has gone
+if (-not $process.WaitForExit(120000)) {
+    # Each self-test step has its own 30 second limit, so two minutes means the program is stuck.
+    try { $process.Kill() } catch { }
+    $timedOut = $true
+} else {
+    $timedOut = $false
+}
+$lines = @()
+if (Test-Path $result) { $lines = @(Get-Content -LiteralPath $result -Encoding UTF8) }
+Write-Host '--- Bridge.exe --selftest ---'
+if ($lines.Count -gt 0) { $lines | ForEach-Object { Write-Host $_ } } else { Write-Host '(no output file or it is empty)' }
+Write-Host '--- end of self-test output ---'
+$last = ($lines | Where-Object { $_ -and $_.Trim() } | Select-Object -Last 1)
+if ($timedOut) { throw 'The packaged self-test did not finish within 120 seconds.' }
+if ($process.ExitCode -ne 0) { throw "The packaged self-test failed: exit code $($process.ExitCode)." }
+if ($null -eq $last -or $last.Trim() -ne 'SELFTEST PASSED') { throw "The packaged self-test did not report SELFTEST PASSED (last line: '$last')." }
+Remove-Item -LiteralPath $result -Force -ErrorAction SilentlyContinue
+
+# 5. Zip the folder (the archive holds a top-level "Bridge" folder).
 Compress-Archive -Path $appImage -DestinationPath $zip -CompressionLevel Optimal
 
 Write-Host "Done: $appImage"
