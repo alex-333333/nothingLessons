@@ -13,3 +13,19 @@ fun broadcastOf(ip: ByteArray, prefixLength: Int): ByteArray {
         (ip[i].toInt() or hostMask).toByte()
     }
 }
+
+private val HOST_CHARS = Regex("^[A-Za-z0-9._-]+$")
+
+/**
+ * "192.168.1.5" or "192.168.1.5:1234" (a name works as well) -> host and port; [defaultPort] when no port is given.
+ * Null if the text is not a plain host or the port is not 1..65535.
+ */
+fun parseHostPort(text: String, defaultPort: Int = Api.PORT): Pair<String, Int>? {
+    val parts = text.trim().split(':')
+    if (parts.size > 2) return null
+    val host = parts[0]
+    if (!HOST_CHARS.matches(host)) return null
+    val port = if (parts.size == 2) parts[1].toIntOrNull() ?: return null else defaultPort
+    if (port !in 1..65535) return null
+    return host to port
+}
