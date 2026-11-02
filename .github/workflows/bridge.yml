@@ -1,0 +1,119 @@
+name: Bridge
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Only the newest push publishes the "bridge" release; an older run still going is cancelled.
+concurrency:
+  group: bridge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test the Bridge modules
+        run: ./gradlew -p bridge test --stacktrace
+
+      - name: Test core
+        run: ./gradlew -p core test --stacktrace
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the release APK
+        run: ./gradlew :bridge:android:assembleRelease --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nothing-bridge-apk
+          path: bridge/android/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The script builds the jars, makes the app-image with jpackage, runs Bridge.exe --selftest
+      # and fails unless it passes, and only then zips the folder.
+      - name: Package the Windows program
+        shell: pwsh
+        run: ./bridge/pc/package-win.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bridge-win
+          path: bridge/pc/build/Bridge-win.zip
+          if-no-files-found: error
+
+  release:
+    if: github.event_name == 'push'
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nothing-bridge-apk
+          path: dist/apk
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bridge-win
+          path: dist/win
+
+      - name: Prepare release assets
+        run: |
+          cp dist/apk/*.apk nothing-bridge.apk
+          cp dist/win/Bridge-win.zip Bridge-win.zip
+          ls -l nothing-bridge.apk Bridge-win.zip
+
+      # The "bridge" tag is moved to this commit, then its release is created or updated in place.
+      - name: Move the bridge tag
+        run: |
+          git tag -f bridge
+          git push -f origin refs/tags/bridge
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: bridge
+          name: Мост
+          prerelease: false
+          make_latest: false
+          files: |
+            nothing-bridge.apk
+            Bridge-win.zip
