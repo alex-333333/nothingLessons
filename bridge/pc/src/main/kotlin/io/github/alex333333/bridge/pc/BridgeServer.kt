@@ -114,6 +114,8 @@ class BridgeServer(
         val server = embeddedServer(
             Netty,
             configure = {
+                // HTTP/1.1 only: reading the (empty) body of a bodiless request never completes over h2 on Netty 3.1.3.
+                enableHttp2 = false
                 sslConnector(identity.keyStore, identity.alias, { identity.password }, { identity.password }) {
                     this.port = port
                     host = "0.0.0.0"
@@ -128,7 +130,7 @@ class BridgeServer(
 
     @Synchronized
     fun stop() {
-        engine?.stop(gracePeriodMillis = 100, timeoutMillis = 2_000)
+        engine?.stop(gracePeriodMillis = 300, timeoutMillis = 2_000)
         engine = null
     }
 

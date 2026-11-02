@@ -241,6 +241,23 @@ class ServerTest {
         }
     }
 
+    /** A client that offers h2 through ALPN (the default of java.net.http and of OkHttp) must still get answers. */
+    @Test fun bodilessSignedRequestsAnswerForClientsThatOfferHttp2() {
+        pairDevice()
+        val h2Capable = HttpClient.newBuilder().sslContext(ssl).build() // default version: HTTP_2, falls back to 1.1
+        fun call(method: String, path: String): HttpResponse<ByteArray> {
+            val req = HttpRequest.newBuilder(URI("https://localhost:$port$path")).timeout(java.time.Duration.ofSeconds(5))
+                .method(method, HttpRequest.BodyPublishers.noBody())
+            sigHeaders(method, path, null).forEach { (k, v) -> req.header(k, v) }
+            return h2Capable.send(req.build(), HttpResponse.BodyHandlers.ofByteArray())
+        }
+        for ((method, path) in listOf("GET" to Api.NOTES, "GET" to Api.CLIPBOARD, "GET" to Api.OUTBOX, "DELETE" to "${Api.NOTES}/none")) {
+            val r = call(method, path)
+            assertEquals("$method $path", if (method == "DELETE") 404 else 200, r.statusCode())
+            assertEquals("$method $path", HttpClient.Version.HTTP_1_1, r.version())
+        }
+    }
+
     @Test fun certificateIsStoredAndReusedAcrossRestarts() {
         val before = server.tlsFingerprintHex
         assertTrue(Files.exists(dataDir.resolve("bridge.p12")))
