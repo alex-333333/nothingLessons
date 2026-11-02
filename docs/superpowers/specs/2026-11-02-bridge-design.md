@@ -14,7 +14,7 @@
 
 | Часть | Что это | Где |
 |---|---|---|
-| `bridge/protocol` | общий модуль на Kotlin/JVM: сообщения, привязка, подпись запросов, сборка magic-пакета WoL. Все тесты запускаются без Android | `bridge/protocol` |
+| `bridge/protocol` | общий модуль на Kotlin/JVM: сообщения, привязка, подпись запросов, сборка magic-пакета WoL и клиент на OkHttp, которым пользуется телефон. Все тесты запускаются без Android | `bridge/protocol` |
 | `bridge/pc` | программа для Windows: окно в трее, HTTPS и WebSocket сервер, mDNS, буфер, файлы, ввод. Упаковывается через `jpackage` со своим JRE, ставить ничего не нужно | `bridge/pc` |
 | `bridge/android` | приложение для телефона: Compose, тот же стиль, что у виджета, использует `:core` (`DotMatrix`) и палитру | `bridge/android` |
 
