@@ -71,6 +71,9 @@ import java.io.IOException
 import java.net.InetAddress
 import java.nio.file.Path
 import java.security.MessageDigest
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 
 /** What the phone shows after the PC announces a fresh code: the digits to type and the certificate check value. */
 data class PairingCode(val code: String, val fingerprintShort: String)
@@ -88,7 +91,8 @@ class BridgeServer(
     downloadsDir: Path,
     private val platform: PlatformHooks,
     private val pcName: String,
-    private val macs: List<String>,
+    /** Asked for every pairing, so the answer reflects the adapters of that moment. */
+    private val macs: () -> List<String>,
     private val now: () -> Long = System::currentTimeMillis,
     private val peerAllowed: (InetAddress) -> Boolean = ::isLocalAddress,
 ) {
@@ -101,6 +105,10 @@ class BridgeServer(
     private val events = MutableSharedFlow<ServerEvent>(extraBufferCapacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
     @Volatile private var pairing: PairingSession? = null
+    private val notesListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    /** deviceId -> time of the last "connected" balloon, to keep a reconnecting phone quiet. */
+    private val connectedNoticeAt = ConcurrentHashMap<String, Long>()
     private var engine: EmbeddedServer<*, *>? = null
 
     val tlsFingerprintHex: String get() = identity.fingerprintHex
@@ -141,6 +149,32 @@ class BridgeServer(
         return PairingCode(session.code, Fingerprint.short(identity.fingerprintHex))
     }
 
+    // ---- notes, as seen from the PC's own window ----------------------------------------------------------------
+
+    fun listNotes(): List<Note> = notes.list()
+
+    /** Creates a note (when [id] is null) or replaces the text of an existing one; connected phones are told. */
+    fun saveNote(id: String?, text: String): Note {
+        val note = Note(id ?: UUID.randomUUID().toString(), text, now())
+        notes.put(note)
+        notesChanged()
+        return note
+    }
+
+    fun deleteNote(id: String) {
+        if (notes.delete(id)) notesChanged()
+    }
+
+    /** [listener] runs (on an arbitrary thread) after every change of the notes, wherever it came from. */
+    fun onNotesChanged(listener: () -> Unit) {
+        notesListeners += listener
+    }
+
+    private fun notesChanged() {
+        events.tryEmit(ServerEvent.NotesChanged)
+        for (listener in notesListeners) runCatching(listener)
+    }
+
     /** Offers [file] to the phone (it stays where it is) and tells connected phones. */
     fun sendToPhone(file: Path) {
         files.addToOutbox(file)
@@ -166,6 +200,7 @@ class BridgeServer(
         const val MAX_DRAIN_BYTES = 16L * 1_024 * 1_024
         const val MAX_FRAME_BYTES = 1L shl 20
         const val MAX_ID_LENGTH = 100
+        const val CONNECTED_NOTICE_INTERVAL_MS = 10 * 60_000L
         val LITERAL_ADDRESS = Regex("^([0-9.]+|[0-9A-Fa-f:.]+(%[0-9A-Za-z_.-]+)?)$")
         val DEVICE_ID = Regex("^[A-Za-z0-9._-]{1,$MAX_ID_LENGTH}$")
         val EMPTY_BODY_HASH = Signer.sha256Hex(ByteArray(0))
@@ -203,7 +238,7 @@ class BridgeServer(
             delete("${Api.NOTES}/{id}") {
                 val id = call.parameters["id"].orEmpty()
                 if (notes.delete(id)) {
-                    events.tryEmit(ServerEvent.NotesChanged)
+                    notesChanged()
                     call.respond(HttpStatusCode.OK)
                 } else {
                     call.respond(HttpStatusCode.NotFound)
@@ -356,8 +391,8 @@ class BridgeServer(
         }
         val name = cleanName(request.deviceName)
         val token = devices.pair(request.deviceId, name)
-        platform.notify("Paired: $name")
-        call.respondJson(BridgeJson.encodeToString(PairResponse.serializer(), PairResponse(token, pcName, macs)))
+        platform.notify("Телефон привязан: $name")
+        call.respondJson(BridgeJson.encodeToString(PairResponse.serializer(), PairResponse(token, pcName, macs())))
     }
 
     /** Device names end up in tray messages: drop control characters and keep them short. */
@@ -374,8 +409,9 @@ class BridgeServer(
             call.respond(HttpStatusCode.BadRequest)
             return
         }
-        notes.put(note)
-        events.tryEmit(ServerEvent.NotesChanged)
+        val isNew = notes.put(note)
+        if (isNew) platform.notify("Новая заметка с телефона")
+        notesChanged()
         call.respond(HttpStatusCode.OK)
     }
 
@@ -403,9 +439,24 @@ class BridgeServer(
         }
     }
 
+    /** A phone that reconnects every few seconds must not flood the tray: one balloon per device per 10 minutes. */
+    private fun announceConnection(deviceId: String) {
+        val time = now()
+        var show = false
+        connectedNoticeAt.compute(deviceId) { _, last ->
+            if (last == null || time - last >= CONNECTED_NOTICE_INTERVAL_MS || time < last) {
+                show = true
+                time
+            } else {
+                last
+            }
+        }
+        if (show) platform.notify("Телефон подключён: ${devices.nameFor(deviceId) ?: "Phone"}")
+    }
+
     private suspend fun handleChannel(call: ApplicationCall, session: DefaultWebSocketServerSession) {
         val caller = call.attributes[CALLER]
-        platform.notify("Connected: ${devices.nameFor(caller.deviceId) ?: "Phone"}")
+        announceConnection(caller.deviceId)
         val forwarder = session.launch(start = CoroutineStart.UNDISPATCHED) {
             events.collect { event ->
                 session.send(Frame.Text(BridgeJson.encodeToString(ServerEvent.serializer(), event)))

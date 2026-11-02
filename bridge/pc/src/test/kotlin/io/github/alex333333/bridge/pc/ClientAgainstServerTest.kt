@@ -73,7 +73,7 @@ class ClientAgainstServerTest {
     }
 
     private fun newServer(data: Path, dl: Path, hooks: FakePlatform): BridgeServer {
-        val s = BridgeServer(data, dl, hooks, "Рабочий ПК", listOf("AA-BB-CC-DD-EE-FF"))
+        val s = BridgeServer(data, dl, hooks, "Рабочий ПК", { listOf("AA-BB-CC-DD-EE-FF") })
         servers += s
         return s
     }

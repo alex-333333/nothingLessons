@@ -1,5 +1,6 @@
 package io.github.alex333333.bridge.pc
 
+import io.github.alex333333.bridge.protocol.Note
 import java.awt.BorderLayout
 import java.awt.Color
 import java.awt.Desktop
@@ -33,6 +34,12 @@ class UiActions(
     val sendToPhone: (Path) -> Unit,
     val downloadsDir: Path,
     val unpairAll: () -> Unit,
+    val listNotes: () -> List<Note>,
+    /** A null id creates a new note. */
+    val saveNote: (String?, String) -> Unit,
+    val deleteNote: (String) -> Unit,
+    /** Registers a callback that runs after every change of the notes, including those made on the phone. */
+    val onNotesChanged: (() -> Unit) -> Unit,
     val exit: () -> Unit,
 )
 
@@ -53,6 +60,7 @@ interface Ui {
 private object Texts {
     const val TITLE = "Мост"
     const val SHOW_CODE = "Показать код привязки"
+    const val NOTES = "Заметки…"
     const val SEND_FILE = "Отправить файл на телефон…"
     const val OPEN_FOLDER = "Открыть папку Мост"
     const val UNPAIR = "Отвязать все телефоны"
@@ -63,7 +71,7 @@ private object Texts {
 internal class ConsoleUi : Ui {
     override fun show(actions: UiActions) {
         val code = actions.newCode()
-        println("${Texts.TITLE}: код привязки ${formatCode(code.code)}, отпечаток ${code.fingerprintShort}. Нет экрана, меню недоступно; Ctrl+C для выхода.")
+        println("${Texts.TITLE}: код привязки ${formatCode(code.code)}, отпечаток ${code.fingerprintShort}, ${addressLine(LocalInterfaces.localIpv4Addresses())}. Нет экрана, меню недоступно; Ctrl+C для выхода.")
         Runtime.getRuntime().addShutdownHook(Thread { actions.exit() })
     }
 
@@ -72,12 +80,17 @@ internal class ConsoleUi : Ui {
     override fun dispose() {}
 }
 
+/** "Адрес ПК: 192.168.1.25" (comma-separated if the PC has several): what to type on the phone if it does not find the PC. */
+internal fun addressLine(addresses: List<String>): String =
+    "Адрес ПК: " + if (addresses.isEmpty()) "не найден (нет сети)" else addresses.joinToString(", ")
+
 internal fun formatCode(code: String): String = if (code.length == 6) "${code.take(3)} ${code.drop(3)}" else code
 
 internal class SwingUi : Ui {
     private var trayIcon: TrayIcon? = null
     private var statusLabel: JLabel? = null
     private var window: JFrame? = null
+    private var notesWindow: NotesWindow? = null
 
     init {
         try {
@@ -89,7 +102,15 @@ internal class SwingUi : Ui {
 
     override fun show(actions: UiActions) {
         SwingUtilities.invokeLater {
-            if (SystemTray.isSupported()) installTray(actions) else installWindow(actions)
+            // Without a working tray icon the user would have no way to reach the program, so fall back to a window.
+            val trayWorks = SystemTray.isSupported() && try {
+                installTray(actions)
+                true
+            } catch (e: Exception) {
+                System.err.println("Tray icon failed: $e")
+                false
+            }
+            if (!trayWorks) installWindow(actions)
         }
     }
 
@@ -109,6 +130,7 @@ internal class SwingUi : Ui {
         val remove = Runnable {
             trayIcon?.let { SystemTray.getSystemTray().remove(it) }
             window?.dispose()
+            notesWindow?.dispose()
         }
         try {
             if (SwingUtilities.isEventDispatchThread()) remove.run() else SwingUtilities.invokeAndWait(remove)
@@ -123,6 +145,7 @@ internal class SwingUi : Ui {
         val menu = PopupMenu()
         fun item(label: String, run: () -> Unit) = menu.add(MenuItem(label).also { it.addActionListener { run() } })
         item(Texts.SHOW_CODE) { showCode(actions) }
+        item(Texts.NOTES) { showNotes(actions) }
         item(Texts.SEND_FILE) { sendFile(actions) }
         item(Texts.OPEN_FOLDER) { openFolder(actions) }
         item(Texts.UNPAIR) { unpair(actions) }
@@ -130,8 +153,8 @@ internal class SwingUi : Ui {
         item(Texts.EXIT) { actions.exit() }
         val icon = TrayIcon(drawIcon(32), Texts.TITLE, menu).also { it.isImageAutoSize = true }
         icon.addActionListener { showCode(actions) } // double click
-        trayIcon = icon
         SystemTray.getSystemTray().add(icon)
+        trayIcon = icon // only once it is really in the tray, so that notify() falls back to the window otherwise
     }
 
     private fun installWindow(actions: UiActions) {
@@ -147,6 +170,7 @@ internal class SwingUi : Ui {
             panel.add(javax.swing.Box.createVerticalStrut(6))
         }
         button(Texts.SHOW_CODE) { showCode(actions) }
+        button(Texts.NOTES) { showNotes(actions) }
         button(Texts.SEND_FILE) { sendFile(actions) }
         button(Texts.OPEN_FOLDER) { openFolder(actions) }
         button(Texts.UNPAIR) { unpair(actions) }
@@ -174,8 +198,14 @@ internal class SwingUi : Ui {
         panel.add(JLabel("Введите этот код в приложении на телефоне:").also { it.alignmentX = 0.5f })
         panel.add(digits)
         panel.add(JLabel("Отпечаток сертификата: ${code.fingerprintShort}").also { it.alignmentX = 0.5f })
+        panel.add(JLabel(addressLine(LocalInterfaces.localIpv4Addresses())).also { it.alignmentX = 0.5f })
         panel.add(JLabel("Сверьте это с экраном телефона").also { it.alignmentX = 0.5f })
         JOptionPane.showMessageDialog(null, panel, Texts.SHOW_CODE, JOptionPane.PLAIN_MESSAGE)
+    }
+
+    private fun showNotes(actions: UiActions) {
+        val notesWindow = notesWindow ?: NotesWindow(actions).also { notesWindow = it }
+        notesWindow.open()
     }
 
     private fun sendFile(actions: UiActions) {

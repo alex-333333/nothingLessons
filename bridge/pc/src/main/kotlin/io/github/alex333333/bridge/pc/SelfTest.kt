@@ -37,7 +37,7 @@ internal fun runSelfTest(log: (String) -> Unit): Int {
     try {
         data = Files.createTempDirectory("bridge-selftest-data")
         downloads = Files.createTempDirectory("bridge-selftest-downloads")
-        server = BridgeServer(data, downloads, NoOpPlatform, "selftest", emptyList())
+        server = BridgeServer(data, downloads, NoOpPlatform, "selftest", { emptyList() })
         val port = server.start(0)
         log("OK server started on port $port")
 

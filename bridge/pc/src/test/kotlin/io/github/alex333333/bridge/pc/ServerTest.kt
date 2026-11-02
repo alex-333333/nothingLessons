@@ -64,6 +64,7 @@ class ServerTest {
 
     private val clock = AtomicLong(System.currentTimeMillis())
     private val peerOk = AtomicBoolean(true)
+    @Volatile private var macs = listOf("AA-BB-CC-DD-EE-FF")
     private val servers = mutableListOf<BridgeServer>()
     private val sockets = mutableListOf<WebSocket>()
 
@@ -87,7 +88,7 @@ class ServerTest {
 
     private fun newServer(): BridgeServer {
         val s = BridgeServer(
-            dataDir, downloads, platform, "Рабочий ПК", listOf("AA-BB-CC-DD-EE-FF"),
+            dataDir, downloads, platform, "Рабочий ПК", { macs },
             now = { clock.get() }, peerAllowed = { peerOk.get() },
         )
         servers += s
@@ -285,6 +286,20 @@ class ServerTest {
         assertEquals(listOf("AA-BB-CC-DD-EE-FF"), resp.macs)
         assertTrue(Regex("^[A-Za-z0-9_-]{43}$").matches(resp.token)) // 32 random bytes, base64url without padding
         assertTrue(platform.notifications.any { "Pixel" in it })
+    }
+
+    @Test fun macsAreAskedAgainForEveryPairing() {
+        macs = listOf("AA-BB-CC-DD-EE-FF")
+        val first = pairRequest(server.newPairingCode().code, device = "phone-a")
+        assertEquals(listOf("AA-BB-CC-DD-EE-FF"), BridgeJson.decodeFromString<PairResponse>(first.text).macs)
+        macs = listOf("11-22-33-44-55-66", "77-88-99-AA-BB-CC")
+        val second = pairRequest(server.newPairingCode().code, device = "phone-b")
+        assertEquals(listOf("11-22-33-44-55-66", "77-88-99-AA-BB-CC"), BridgeJson.decodeFromString<PairResponse>(second.text).macs)
+    }
+
+    @Test fun pairingBalloonIsRussian() {
+        pairRequest(server.newPairingCode().code, name = "Pixel")
+        assertEquals(listOf("Телефон привязан: Pixel"), platform.notifications.toList())
     }
 
     @Test fun theSameCodeCannotBeUsedTwice() {
@@ -695,6 +710,103 @@ class ServerTest {
         await("channel ready") { platform.calls.isNotEmpty() }
         json("PUT", "${Api.NOTES}/n1", BridgeJson.encodeToString(Note("n1", "a", 1)))
         assertEquals(ServerEvent.NotesChanged, ws.nextEvent())
+    }
+
+    private fun connectedBalloons() = platform.notifications.filter { it.startsWith("Телефон подключён") }
+
+    private fun connectAndWaitUntilServed(): Ws {
+        val before = platform.calls.size
+        val ws = connectWs()
+        ws.send(InputEvent.Media(MediaAction.Mute))
+        await("channel ready") { platform.calls.size > before }
+        return ws
+    }
+
+    @Test fun theConnectedBalloonIsRussianAndNamesThePhone() {
+        pairRequest(server.newPairingCode().code, name = "Pixel").also { token = BridgeJson.decodeFromString<PairResponse>(it.text).token }
+        connectAndWaitUntilServed()
+        assertEquals(listOf("Телефон подключён: Pixel"), connectedBalloons())
+    }
+
+    @Test fun theConnectedBalloonIsShownOncePerDeviceInTenMinutes() {
+        pairDevice()
+        connectAndWaitUntilServed()
+        assertEquals(1, connectedBalloons().size)
+        clock.addAndGet(9 * 60_000L)
+        connectAndWaitUntilServed() // a reconnect after 9 minutes: silent
+        assertEquals(1, connectedBalloons().size)
+        clock.addAndGet(2 * 60_000L) // 11 minutes after the first balloon
+        connectAndWaitUntilServed()
+        assertEquals(2, connectedBalloons().size)
+    }
+
+    @Test fun theConnectedBalloonLimitIsPerDevice() {
+        pairDevice()
+        connectAndWaitUntilServed()
+        val firstToken = token
+        val r = pairRequest(server.newPairingCode().code, device = "phone-2", name = "Other")
+        token = BridgeJson.decodeFromString<PairResponse>(r.text).token
+        val before = platform.calls.size
+        val ws = connectWs(sigHeaders("GET", Api.WS, null, device = "phone-2", tok = token))
+        ws.send(InputEvent.Media(MediaAction.Mute))
+        await("second channel ready") { platform.calls.size > before }
+        assertEquals(listOf("Телефон подключён: Phone", "Телефон подключён: Other"), connectedBalloons())
+        assertNotEquals(firstToken, token)
+    }
+
+    // ---- notes seen from the PC ---------------------------------------------------------------------------------
+
+    @Test fun pcNotesRoundTripWithCyrillicEmojiAndNewlines() {
+        assertEquals(emptyList<Note>(), server.listNotes())
+        val text = "Привет, мир! 😀\nвторая строка\r\n\t\"кавычки\""
+        val created = server.saveNote(null, text)
+        assertEquals(text, created.text)
+        assertTrue(created.id.isNotBlank())
+        assertEquals(clock.get(), created.updatedAt)
+        assertEquals(listOf(created), server.listNotes())
+
+        clock.addAndGet(1_000)
+        val edited = server.saveNote(created.id, "правка")
+        assertEquals(created.id, edited.id)
+        assertEquals(clock.get(), edited.updatedAt)
+        assertEquals(listOf(edited), server.listNotes())
+
+        // The phone sees the same list over HTTP.
+        pairDevice()
+        assertEquals(listOf(edited), BridgeJson.decodeFromString(ListSerializer(Note.serializer()), send("GET", Api.NOTES).text))
+
+        server.deleteNote(created.id)
+        assertEquals(emptyList<Note>(), server.listNotes())
+        server.deleteNote("no-such-note") // harmless
+    }
+
+    @Test fun pcNoteChangesAreBroadcastToTheChannelAndListeners() {
+        pairDevice()
+        val ws = connectAndWaitUntilServed()
+        val seen = java.util.concurrent.atomic.AtomicInteger()
+        server.onNotesChanged { seen.incrementAndGet() }
+        val note = server.saveNote(null, "a")
+        assertEquals(ServerEvent.NotesChanged, ws.nextEvent())
+        server.deleteNote(note.id)
+        assertEquals(ServerEvent.NotesChanged, ws.nextEvent())
+        assertEquals(2, seen.get())
+    }
+
+    @Test fun aNoteFromThePhoneNotifiesOnlyWhenItIsNew() {
+        pairDevice()
+        platform.notifications.clear()
+        assertEquals(200, json("PUT", "${Api.NOTES}/n1", BridgeJson.encodeToString(Note("n1", "a", 1))).status)
+        assertEquals(listOf("Новая заметка с телефона"), platform.notifications.toList())
+        assertEquals(200, json("PUT", "${Api.NOTES}/n1", BridgeJson.encodeToString(Note("n1", "b", 2))).status)
+        assertEquals(listOf("Новая заметка с телефона"), platform.notifications.toList())
+        assertEquals(200, json("PUT", "${Api.NOTES}/n2", BridgeJson.encodeToString(Note("n2", "c", 3))).status)
+        assertEquals(2, platform.notifications.size)
+    }
+
+    @Test fun aNoteSavedOnThePcDoesNotNotify() {
+        platform.notifications.clear()
+        server.saveNote(null, "x")
+        assertTrue(platform.notifications.isEmpty())
     }
 
     @Test fun unpairAllRevokesTokensAndNotifiesTheChannel() {

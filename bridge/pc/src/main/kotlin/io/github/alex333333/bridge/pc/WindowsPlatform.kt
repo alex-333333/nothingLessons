@@ -84,7 +84,8 @@ class WindowsPlatform(private val onNotify: (String) -> Unit = {}) : PlatformHoo
             MediaAction.Next -> 176
             MediaAction.Previous -> 177
         }
-        run("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "(New-Object -ComObject WScript.Shell).SendKeys([char]$code)")
+        // PowerShell takes about a second to start; do not hold up the input loop (mouse, keys) while it does.
+        runDetached("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "(New-Object -ComObject WScript.Shell).SendKeys([char]$code)")
     }
 
     override fun power(action: PowerAction) {
@@ -116,6 +117,19 @@ class WindowsPlatform(private val onNotify: (String) -> Unit = {}) : PlatformHoo
             }
         }
         throw last!!
+    }
+
+    /** Starts the process and returns at once; a daemon thread reaps it (kills it after 10 s) so it cannot linger. */
+    private fun runDetached(vararg command: String) {
+        val process = ProcessBuilder(*command).redirectErrorStream(true).start()
+        process.outputStream.close()
+        Thread {
+            try {
+                if (!process.waitFor(10, TimeUnit.SECONDS)) process.destroyForcibly()
+            } catch (_: InterruptedException) {
+                process.destroyForcibly()
+            }
+        }.also { it.isDaemon = true; it.name = "bridge-media-key" }.start()
     }
 
     private fun run(vararg command: String) {

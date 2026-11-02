@@ -91,52 +91,68 @@ private fun isBindFailure(e: Throwable): Boolean = generateSequence(e) { it.caus
 
 private fun runApp(port: Int): Int {
     val ui = Ui.create()
-    // A second copy of the program finds the port taken; that is the whole single-instance check.
-    if (port != 0 && !portIsFree(port)) {
-        ui.error("Мост уже запущен или порт $port занят другой программой.")
-        return EXIT_PORT_BUSY
-    }
-
-    val dataDir = appDataDir()
-    val downloads = Paths.get(System.getProperty("user.home"), "Downloads", "Мост")
-    Files.createDirectories(dataDir)
-    Files.createDirectories(downloads)
-
-    val platform = WindowsPlatform { ui.notify(it) }
-    val server = BridgeServer(dataDir, downloads, platform, pcName(), MacList.current())
-    val boundPort = try {
-        server.start(port)
-    } catch (e: Exception) {
-        if (isBindFailure(e)) {
+    var server: BridgeServer? = null
+    var discovery: Discovery? = null
+    var uiShown = false
+    try {
+        // A second copy of the program finds the port taken; that is the whole single-instance check.
+        if (port != 0 && !portIsFree(port)) {
             ui.error("Мост уже запущен или порт $port занят другой программой.")
             return EXIT_PORT_BUSY
         }
-        ui.error("Не удалось запустить Мост: $e")
+
+        val dataDir = appDataDir()
+        val downloads = Paths.get(System.getProperty("user.home"), "Downloads", "Мост")
+        Files.createDirectories(dataDir)
+        Files.createDirectories(downloads)
+
+        val platform = WindowsPlatform { ui.notify(it) }
+        val bridge = BridgeServer(dataDir, downloads, platform, pcName(), MacList::current)
+        server = bridge
+        val boundPort = try {
+            bridge.start(port)
+        } catch (e: Exception) {
+            if (isBindFailure(e)) {
+                ui.error("Мост уже запущен или порт $port занят другой программой.")
+                return EXIT_PORT_BUSY
+            }
+            throw e
+        }
+
+        val announcer = Discovery(pcName(), bridge.pcId, boundPort)
+        discovery = announcer
+        try {
+            announcer.start()
+        } catch (e: Exception) {
+            // The phone can still be paired by typing the address; do not stop the program for this.
+            System.err.println("mDNS announcement failed: $e")
+        }
+
+        val done = CountDownLatch(1)
+        uiShown = true
+        ui.show(
+            UiActions(
+                newCode = bridge::newPairingCode,
+                sendToPhone = bridge::sendToPhone,
+                downloadsDir = downloads,
+                unpairAll = bridge::unpairAll,
+                listNotes = bridge::listNotes,
+                saveNote = { id, text -> bridge.saveNote(id, text) },
+                deleteNote = bridge::deleteNote,
+                onNotesChanged = bridge::onNotesChanged,
+                exit = { done.countDown() },
+            ),
+        )
+        done.await()
+        return 0
+    } catch (t: Throwable) {
+        // No silent death and no zombie: tell the user, stop whatever already runs, exit with an error.
+        val message = "Не удалось запустить Мост: ${t.message ?: t}"
+        runCatching { ui.error(message) }.onFailure { System.err.println(message) }
         return 1
+    } finally {
+        if (uiShown) runCatching { ui.dispose() }
+        discovery?.let { runCatching { it.close() } }
+        server?.let { runCatching { it.stop() } }
     }
-
-    val discovery = Discovery(pcName(), server.pcId, boundPort)
-    try {
-        discovery.start()
-    } catch (e: Exception) {
-        // The phone can still be paired by typing the address; do not stop the program for this.
-        System.err.println("mDNS announcement failed: $e")
-    }
-
-    val done = CountDownLatch(1)
-    ui.show(
-        UiActions(
-            newCode = server::newPairingCode,
-            sendToPhone = server::sendToPhone,
-            downloadsDir = downloads,
-            unpairAll = server::unpairAll,
-            exit = { done.countDown() },
-        ),
-    )
-    done.await()
-
-    ui.dispose()
-    runCatching { discovery.close() }
-    runCatching { server.stop() }
-    return 0
 }

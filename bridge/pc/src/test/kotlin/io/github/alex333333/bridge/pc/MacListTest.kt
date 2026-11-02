@@ -16,4 +16,25 @@ class MacListTest {
         assertTrue(macs.toString(), macs.all { format.matches(it) })
         assertEquals(macs.distinct(), macs)
     }
+
+    @Test fun currentIsCappedAtEight() {
+        assertTrue(MacList.current().size <= 8)
+    }
+
+    @Test fun mergeKeepsOrderDropsBadAddressesDuplicatesAndCapsAtEight() {
+        fun mac(n: Int) = byteArrayOf(0, 0, 0, 0, 0, n.toByte())
+        val running = listOf(mac(1), null, byteArrayOf(1, 2, 3), mac(2))
+        val idle = listOf(mac(2), mac(3), ByteArray(6), mac(4), mac(5), mac(6), mac(7), mac(8), mac(9), mac(10))
+        val merged = MacList.merge(running, idle)
+        assertEquals(
+            listOf("00-00-00-00-00-01", "00-00-00-00-00-02", "00-00-00-00-00-03", "00-00-00-00-00-04", "00-00-00-00-00-05", "00-00-00-00-00-06", "00-00-00-00-00-07", "00-00-00-00-00-08"),
+            merged,
+        )
+    }
+
+    @Test fun localIpv4AddressesAreDottedQuadsWithoutDuplicates() {
+        val addresses = LocalInterfaces.localIpv4Addresses()
+        assertTrue(addresses.toString(), addresses.all { Regex("^\\d{1,3}(\\.\\d{1,3}){3}$").matches(it) })
+        assertEquals(addresses.distinct(), addresses)
+    }
 }

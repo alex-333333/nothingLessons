@@ -18,10 +18,12 @@ internal class NotesStore(dataDir: Path) {
 
     @Synchronized fun list(): List<Note> = notes
 
-    @Synchronized fun put(note: Note) {
+    /** True if the id was new. */
+    @Synchronized fun put(note: Note): Boolean {
         val index = notes.indexOfFirst { it.id == note.id }
         notes = if (index < 0) notes + note else notes.toMutableList().also { it[index] = note }
         save()
+        return index < 0
     }
 
     /** True if a note was removed. */
