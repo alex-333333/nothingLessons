@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "nothingLessons"
-include(":core", ":app", ":bridge:protocol", ":bridge:pc")
+include(":core", ":app", ":bridge:protocol", ":bridge:pc", ":bridge:android")
