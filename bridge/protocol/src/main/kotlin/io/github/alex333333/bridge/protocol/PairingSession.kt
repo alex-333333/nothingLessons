@@ -25,6 +25,6 @@ class PairingSession(
 
     companion object {
         /** Exactly six digits; leading zeros are allowed. */
-        fun newCode(random: Random = SecureRandom()): String = "%06d".format(random.nextInt(1_000_000))
+        fun newCode(random: Random = SecureRandom()): String = random.nextInt(1_000_000).toString().padStart(6, '0')
     }
 }

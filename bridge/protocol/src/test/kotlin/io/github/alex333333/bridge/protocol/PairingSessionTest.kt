@@ -55,4 +55,18 @@ class PairingSessionTest {
         }
         assertEquals("000042", PairingSession.newCode(fixed))
     }
+
+    @Test fun newCodeIsAsciiDigitsUnderArabicLocale() {
+        val saved = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("ar-EG"))
+            repeat(100) {
+                val c = PairingSession.newCode()
+                assertEquals(c, 6, c.length)
+                assertTrue(c, c.all { it in '0'..'9' })
+            }
+        } finally {
+            java.util.Locale.setDefault(saved)
+        }
+    }
 }
