@@ -29,3 +29,16 @@ fun parseHostPort(text: String, defaultPort: Int = Api.PORT): Pair<String, Int>?
     if (port !in 1..65535) return null
     return host to port
 }
+
+/** "1,5 КБ": a file size for people, binary units, one decimal. */
+fun formatSize(bytes: Long): String {
+    if (bytes < 1024) return "${bytes.coerceAtLeast(0)} Б"
+    val units = listOf("КБ", "МБ", "ГБ", "ТБ")
+    var value = bytes.toDouble()
+    var unit = -1
+    while (value >= 1024 && unit < units.lastIndex) {
+        value /= 1024
+        unit++
+    }
+    return String.format(java.util.Locale.ROOT, "%.1f", value).replace('.', ',') + " " + units[unit]
+}
