@@ -45,4 +45,13 @@ class DotMatrixTest {
         // Every letter lights at least one dot in its top row.
         for (letter in 0 until 5) assertTrue((0 until 5).any { grid[letter * 6 + it, 0] })
     }
+
+    @Test
+    fun `bridge title can be drawn in dots`() {
+        val grid = DotMatrix.layout("МОСТ")
+        assertEquals(DotMatrix.ROWS, grid.height)
+        assertEquals(5 * 4 + 3, grid.width)
+        // Every letter lights at least one dot in its top row.
+        for (letter in 0 until 4) assertTrue((0 until 5).any { grid[letter * 6 + it, 0] })
+    }
 }
